@@ -41,9 +41,9 @@ ENEMY_SPRITE_ROTATIONS_FULL = {
 --
 
 SECTORS = {
-	[1] = {col=4, height=1},
-	[2] = {col=8, height=3},
-	[3] = {col=16, height=5},
+	[1] = {col_n=4, col_s=4, col_w=20, col_e=20, height=1},
+	[2] = {col_n=8, col_s=8, col_w=24, col_e=24, height=3},
+	[3] = {col_n=12, col_s=1, col_w=16, col_e=16, height=5},
 
 	[RC_SECTOR_INF] = {col=nil},
 }
@@ -99,7 +99,7 @@ MAX_DISTANCE = max(WIDTH * SQRT_2, HEIGHT * SQRT_2)
 -- MAX_DISTANCE = 16
 -- MAX_DISTANCE = 48
 
-DARKEN_DISTANCE = 8
+DARKEN_DISTANCE = MAX_DISTANCE
 -- DARKEN_DISTANCE = nil
 
 MINIMAP_ENABLED = true
@@ -180,6 +180,7 @@ function get_map(x, y)
 end
 
 function _init()
+
 	rc_set_map(MAP_DATA, SECTORS, MAP_CELL_SIZE)
 
 	rc_set_minimap(
@@ -275,6 +276,7 @@ function _draw()
 			x=1.5, y=4, h=1.5,
 			minimap_col=8,
 			angle=0,
+			shadow=0.5,
 		},
 		{
 			sprites_rotated=ENEMY_SPRITE_ROTATIONS, sprite_rotate_flip=1,
@@ -283,6 +285,7 @@ function _draw()
 			x=5, y=5, h=1.5,
 			minimap_col=8,
 			angle=0.375,
+			shadow=0.5,
 		},
 		{
 			sprite=SPRITE_MEDIKIT,

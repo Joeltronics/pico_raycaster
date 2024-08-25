@@ -9,7 +9,6 @@
 
 - Darken sprites in the distance using palettes
 - Sprites that are floating above the ground
-- Change hit direction flag from X/Y to N/S/E/W
 - Have the sector specify its own per-direction color (or texture)
 - Change darken table to "foggen" table so it can be used for gray fog in the distance, instead of making everything darker
   - Don't want to do this yet because it's also used for X/Y direction colors
@@ -19,6 +18,7 @@
 - Support mget() for map
 - max_distance is in map units, but darken_distance is in real space units, which is confusing when `_rc_map_cell_size != 1`
 - Add minimum render distance
+- API cleanups
 
 ### Complicated big things
 
@@ -41,6 +41,8 @@ Variable ceiling & floor heights
 - Again, this requires a ray crossing multiple sectors
 
 ### Known Bugs
+
+max_distance is not respected with the "infinity" distance at the edge of the map
 
 When using sector heights, a short sector in front of a taller sector can cause the taller sector not to be drawn
 - This is actually quite complicated to fix

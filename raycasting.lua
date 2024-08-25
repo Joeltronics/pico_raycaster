@@ -120,22 +120,22 @@ end
 --
 
 function _rc_darken(col)
+	if (not col) return nil
 	local col_darker = _rc_darkening_table[col]
 	-- assert(col_darker, '' .. col)
 	return col_darker or col
 end
 
 function _rc_get_draw_color(sector, hit_dir)
-
+	-- This check has to be first, because sector might be nil in this case
 	if (hit_dir == 'd') return _rc_distance_fog_color
-
-	local col = sector.col
-
-	if (not col) return nil
-
-	if (hit_dir == 'x') col = _rc_darken(col)
-
-	return col
+	local vals = {
+		e=sector.col_e,
+		w=sector.col_w,
+		n=sector.col_n,
+		s=sector.col_s,
+	}
+	return vals[hit_dir]
 end
 
 function _rc_darken_fillp_col(col, d, double)
@@ -284,10 +284,16 @@ function _rc_cast_ray(cam_x, cam_y, angle)
 
 				hit_sector = _rc_get_map(map_x, map_y_prev)
 				if hit_sector > 0 then
-					t, hit_dir = t_x, 'x'
+					t = t_x
+					-- hit_dir = 'x'
+					hit_dir = 'e'
+					if (dx < 0) hit_dir = 'w'
 				else
 					hit_sector = _rc_get_map(map_x, map_y)
-					t, hit_dir = t_y, 'y'
+					t = t_y
+					-- hit_dir = 'y'
+					hit_dir = 'n'
+					if (dy < 0) hit_dir = 's'
 				end
 
 			else
@@ -295,10 +301,16 @@ function _rc_cast_ray(cam_x, cam_y, angle)
 
 				hit_sector = _rc_get_map(map_x_prev, map_y)
 				if hit_sector > 0 then
-					t, hit_dir = t_y, 'y'
+					t = t_y
+					-- hit_dir = 'y'
+					hit_dir = 'n'
+					if (dy < 0) hit_dir = 's'
 				else
 					hit_sector = _rc_get_map(map_x, map_y)
-					t, hit_dir = t_x, 'x'
+					t = t_x
+					-- hit_dir = 'x'
+					hit_dir = 'e'
+					if (dx < 0) hit_dir = 'w'
 				end
 			end
 
@@ -306,14 +318,16 @@ function _rc_cast_ray(cam_x, cam_y, angle)
 			-- Hit X boundary
 			t = t_x
 			hit_sector = _rc_get_map(map_x, map_y)
-			hit_dir = 'x'
-
+			-- hit_dir = 'x'
+			hit_dir = 'e'
+			if (dx < 0) hit_dir = 'w'
 		elseif t_y then
 			-- Hit Y boundary
 			t = t_y
 			hit_sector = _rc_get_map(map_x, map_y)
-			hit_dir = 'y'
-
+			-- hit_dir = 'y'
+			hit_dir = 'n'
+			if (dy < 0) hit_dir = 's'
 		end
 
 		if hit_sector > 0 then
@@ -545,15 +559,29 @@ function _rc_prepare_sprite(sprite, cam_x, cam_y, cam_angle_degrees)
 	end
 	local x = screen_x - w/2
 
+	-- FIXME: this doesn't seem to work - sprites that are way offscreen still seem to get added to sprite list
 	if (x + w < 0 or x >= _rc_screen_width) return nil
 
 	local y = _rc_screen_cy + height_scale - h
+
+	local shadow
+	if (sprite.shadow) then
+		local shadow_half_w = 0.5 * w * sprite.shadow
+		local shadow_half_h = height_scale / 16 * sprite.shadow
+		shadow = {
+			x0 = screen_x - shadow_half_w,
+			y0 = y + h - shadow_half_h,
+			x1 = screen_x + shadow_half_w,
+			y1 = y + h + shadow_half_h,
+		}
+	end
 
 	return {
 		sp=sp, palt=sprite.palt, x=sprite.x, y=sprite.y, minimap_col=sprite.minimap_col,
 		screen_x=x, screen_y=y, screen_w=w, screen_h=h,
 		flip_x=flip_x,
 		d=d,
+		shadow=shadow,
 	}
 end
 
@@ -573,14 +601,19 @@ function _rc_draw_sprite(cam_x, cam_y, cam_angle_degrees, sprite)
 	while (sprite.d > d2) do
 		x2 -= 1
 		d2 = _rc_depth_table[x2] or 32767
-		if (x1 > x2) return false
+		assert(x1 <= x2)
 	end
 
 	clip(x1, 0, x2-x1+1, _rc_screen_height)
+
+	local sh = sprite.shadow
+	if (sh) ovalfill(sh.x0, sh.y0, sh.x1, sh.y1, 5)
+
 	palt(0, false)
 	palt(sprite.palt, true)
 	sspr(sprite.sp, nil, nil, nil, nil, sprite.screen_x, sprite.screen_y, sprite.screen_w, sprite.screen_h, sprite.flip_x)
 	palt()
+
 	clip()
 
 	return true
@@ -691,15 +724,13 @@ function _rc_draw_main_chunked_bisection_inner(
 
 		local col = _rc_get_draw_color(sector_1, hit_dir_1)
 		if col then
-
-			-- for x=screen_x_1,screen_x_2 do
 			for x=screen_x_1,screen_x_2-1 do
 
 				local t = (x - screen_x_1) / (screen_x_2 - screen_x_1)
 
 				local this_hit_x = lerp(hit_x_1, hit_x_2, t)
 				local this_hit_y = lerp(hit_y_1, hit_y_2, t)
-				local this_hit_d = 1/lerp(1/hit_d_1, 1/hit_d_2, t)  -- TODO: lerp isn't right for d
+				local this_hit_d = 1/lerp(1/hit_d_1, 1/hit_d_2, t)
 				local this_height = lerp(height_1, height_2, t)
 
 				_rc_draw_main_column_from_raycast(x, this_hit_d, this_height, sector_1, hit_dir_1)
