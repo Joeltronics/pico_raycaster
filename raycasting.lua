@@ -188,18 +188,18 @@ end
 
 function _rc_angle_from_center(screen_x)
 	if _rc_fisheye then
-		return scale(screen_x, 0, _rc_screen_width, _rc_half_fov, -_rc_half_fov)
+		return rescale(screen_x, 0, _rc_screen_width, _rc_half_fov, -_rc_half_fov)
 	else
 		-- TODO: it should be possible to do this without needing to take sine, see https://lodev.org/cgtutor/raycasting.html
-		return msin(scale(screen_x, 0, _rc_screen_width, _rc_asin_fov, -_rc_asin_fov)) / TWO_PI
+		return msin(rescale(screen_x, 0, _rc_screen_width, _rc_asin_fov, -_rc_asin_fov)) / TWO_PI
 	end
 end
 
 function _rc_screen_x_from_angle(angle_from_center)
 	if _rc_fisheye then
-		return scale(angle_from_center, _rc_half_fov, -_rc_half_fov, 0, _rc_screen_width)
+		return rescale(angle_from_center, _rc_half_fov, -_rc_half_fov, 0, _rc_screen_width)
 	else
-		return scale(masin(angle_from_center * TWO_PI), _rc_asin_fov, -_rc_asin_fov, 0, _rc_screen_width)
+		return rescale(masin(angle_from_center * TWO_PI), _rc_asin_fov, -_rc_asin_fov, 0, _rc_screen_width)
 	end
 end
 
@@ -437,15 +437,28 @@ end
 
 function _rc_draw_sprites_on_map(player_x, player_y, sprites)
 
+	local size_scale = _rc_minimap_scale * _rc_minimap_player_size
+
+	local r = max(1, 0.125 * size_scale)
+
 	-- Sprites
 	for sprite in all(sprites) do
 		-- if sprite.minimap_col and (sprite.drawn or sprite.d < 1) then
 		if sprite.minimap_col then
-			circfill(
-				_rc_minimap_x_off + _rc_minimap_scale * sprite.x,
-				_rc_minimap_y_off + _rc_minimap_scale * sprite.y,
-				0.125 * _rc_minimap_scale * _rc_minimap_player_size,
-				sprite.minimap_col)
+
+			local x = _rc_minimap_x_off + _rc_minimap_scale * sprite.x
+			local y = _rc_minimap_y_off + _rc_minimap_scale * sprite.y
+
+			if sprite.angle then
+				local dx = 2*cos(sprite.angle)
+				local dy = 2*sin(sprite.angle)
+				line(
+					x, y,
+					x + dx, y + dy,
+					sprite.minimap_col)
+			end
+
+			circfill(x, y, r, sprite.minimap_col)
 		end
 	end
 
@@ -453,8 +466,7 @@ function _rc_draw_sprites_on_map(player_x, player_y, sprites)
 	circfill(
 		_rc_minimap_x_off + _rc_minimap_scale * player_x,
 		_rc_minimap_y_off + _rc_minimap_scale * player_y,
-		0.125 * _rc_minimap_scale * _rc_minimap_player_size,
-		12)
+		r, 12)
 end
 
 --
@@ -491,9 +503,28 @@ function _rc_prepare_sprite(sprite, cam_x, cam_y, cam_angle_degrees)
 	if (d > _rc_max_distance * _rc_map_cell_size) return nil
 
 	local angle = atan2(dx, dy)
-	local angle_from_center = (angle - cam_angle_degrees/360 + 0.5) % 1.0 - 0.5
+	-- local angle_from_center = (angle - cam_angle_degrees/360 + 0.5) % 1.0 - 0.5
+	local angle_from_center = wrap05(angle - cam_angle_degrees/360)
 
 	if (angle_from_center <= -0.25 or angle_from_center >= 0.25) return nil
+
+	local sp = sprite.sprite
+	local flip_x = false
+
+	if sprite.sprites_rotated then
+		local sprite_angle = (sprite.angle or 0) - angle + 0.5
+		local num_rot = #sprite.sprites_rotated
+		if sprite.sprite_rotate_flip then
+			sprite_angle = wrap05(sprite_angle)
+			local idx = round(rescale(abs(sprite_angle), 0, 0.5, 1, num_rot))
+			sp = sprite.sprites_rotated[idx]
+			flip_x = (idx > 1 and idx < num_rot and sgn(sprite_angle) == sgn(sprite.sprite_rotate_flip))
+
+		else
+			sprite_angle %= 1.0
+			sp = sprite.sprites_rotated[1 + (round(sprite_angle * num_rot) % num_rot)]
+		end
+	end
 
 	local screen_x = _rc_screen_x_from_angle(angle_from_center)
 
@@ -504,19 +535,24 @@ function _rc_prepare_sprite(sprite, cam_x, cam_y, cam_angle_degrees)
 		height_scale = 64 / (d * cos(angle_from_center))
 	end
 
-	local h = height_scale*sprite.h
-	local w = h * sprite.s:width() / sprite.s:height()
+	local h = height_scale * sprite.h
+	-- TODO: technically, width should be scaled differently from height - sprite should get stretched horizontally at edges of screen
+	local w = sprite.w
+	if w then
+		w *= height_scale
+	else
+		w = h * sp:width() / sp:height()
+	end
 	local x = screen_x - w/2
-
-	-- TODO: technically, they should get stretched horizontally at edges of screen
 
 	if (x + w < 0 or x >= _rc_screen_width) return nil
 
 	local y = _rc_screen_cy + height_scale - h
 
 	return {
-		s=sprite.s, palt=sprite.palt, x=sprite.x, y=sprite.y, minimap_col=sprite.minimap_col,
+		sp=sp, palt=sprite.palt, x=sprite.x, y=sprite.y, minimap_col=sprite.minimap_col,
 		screen_x=x, screen_y=y, screen_w=w, screen_h=h,
+		flip_x=flip_x,
 		d=d,
 	}
 end
@@ -543,7 +579,7 @@ function _rc_draw_sprite(cam_x, cam_y, cam_angle_degrees, sprite)
 	clip(x1, 0, x2-x1+1, _rc_screen_height)
 	palt(0, false)
 	palt(sprite.palt, true)
-	sspr(sprite.s, nil, nil, nil, nil, sprite.screen_x, sprite.screen_y, sprite.screen_w, sprite.screen_h)
+	sspr(sprite.sp, nil, nil, nil, nil, sprite.screen_x, sprite.screen_y, sprite.screen_w, sprite.screen_h, sprite.flip_x)
 	palt()
 	clip()
 

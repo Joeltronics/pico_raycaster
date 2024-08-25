@@ -21,7 +21,7 @@ function lerp(y1, y2, t)
 	return y1 + t * (y2 - y1)
 end
 
-function scale(val, x1, x2, y1, y2)
+function rescale(val, x1, x2, y1, y2)
 	return lerp(y1, y2, inv_lerp(x1, x2, val))
 end
 
@@ -36,6 +36,10 @@ end
 
 function atan(val)
 	return atan2(1, val)
+end
+
+function wrap05(val)
+	return (val + 0.5) % 1.0 - 0.5
 end
 
 -- https://www.lexaloffle.com/bbs/?tid=2477
